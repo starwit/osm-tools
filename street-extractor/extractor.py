@@ -1,12 +1,13 @@
+import argparse
 import osmnx as ox
 import pandas as pd
 import geopandas as gpd
 from shapely.wkt import loads
 from shapely.geometry import LineString, MultiLineString
-from shapely.ops import unary_union, linemerge
 import matplotlib.pyplot as plt
 import contextily as ctx
 import numpy as np
+from postgis_export import generate_postgis_import
 
 def load_data_from_osm(place):
     G = ox.graph.graph_from_place(place, network_type="drive")
@@ -20,7 +21,13 @@ def load_data_from_osm(place):
     )
 
     edges_ll = edges.to_crs(epsg=4326)
-    return edges_ll
+    
+    # convert edge data to lat/lon coordinates
+    df = edges_ll.reset_index().copy()  # keep u, v, key columns
+    df['coords_list'] = df['geometry'].apply(geom_to_coords_list)
+    df['coords_wkt']  = df['geometry'].apply(lambda g: g.wkt if g is not None else None)    
+    
+    return df
 
 def geom_to_coords_list(geom):
     """Return a flat list of (lon, lat) coordinate tuples for LineString or MultiLineString."""
@@ -72,23 +79,28 @@ def plot_map(gdf):
     ax.set_axis_off()
     ax.legend()
     ax.set_title("Street segments (one color per street)")
-    plt.savefig("streets_map.png", dpi=300, bbox_inches='tight')
+    filename = f"{args.city.replace(', ', '_')}_street_segments"
+    plt.savefig(filename + "streets_map.png", dpi=300, bbox_inches='tight')
+    
+def save_data(gdf):
+    if args.plot:
+        plot_map(gdf)
 
+    filename = f"{args.city.replace(', ', '_')}_street_segments"
+    gdf.to_csv(filename + ".csv", index=False)
+    gdf.to_file(filename + ".gpkg", layer="streets", driver="GPKG")    
 
-place = "Wolfsburg, Germany"
+def main():
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument('city', help='name of city e.g. Berlin, Germany')
+    arg_parser.add_argument('-p', '--plot', help='if true street segments will be plotted into an image')
+    global args
+    args = arg_parser.parse_args()    
+    
+    edges_ll = load_data_from_osm(args.city)
+    gdf = concatenate_streets(edges_ll)
+    save_data(gdf)
+    generate_postgis_import(gdf)
 
-edges_ll = load_data_from_osm(place)
-
-# convert edge data to lat/lon coordinates
-df = edges_ll.reset_index().copy()  # keep u, v, key columns
-df['coords_list'] = df['geometry'].apply(geom_to_coords_list)
-df['coords_wkt']  = df['geometry'].apply(lambda g: g.wkt if g is not None else None)
-
-print(df.head())    
-
-gdf = concatenate_streets(df)
-
-plot_map(gdf)
-
-gdf.to_csv("street_names.csv", index=False)
-gdf.to_file("streets_edges.gpkg", layer="streets", driver="GPKG")
+if __name__ == '__main__':
+    main()

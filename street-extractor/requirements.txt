@@ -1,4 +1,0 @@
-osmnx 
-geopandas
-matplotlib
-contextily
