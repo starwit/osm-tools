@@ -9,7 +9,7 @@ import psycopg2
 
 def generate_postgis_import(gdf, city_name):
     result_query = []
-    sql = "INSERT INTO streets_catalog (city, street_name, street_path) VALUES ('{city_name}', '{street_name}', ST_SetSRID(ST_GeomFromText('{geometry}'),4326));"
+    sql = "INSERT INTO street_catalog (city, street_name, street_path) VALUES ('{city_name}', '{street_name}', ST_SetSRID(ST_GeomFromText('{geometry}'),4326));"
     
     street_names = gdf['street_name'].unique()
     
